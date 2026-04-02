@@ -124,9 +124,35 @@ th.s0,th.s1,th.s2,th.s3{z-index:5}
 .tw::-webkit-scrollbar{width:8px;height:8px}
 .tw::-webkit-scrollbar-track{background:#f0f2f5}
 .tw::-webkit-scrollbar-thumb{background:#b0bec5;border-radius:4px}
+
+/* ===== Password overlay ===== */
+#pw-overlay{position:fixed;inset:0;background:#1a3a5c;display:flex;align-items:center;justify-content:center;z-index:9999}
+#pw-box{background:#fff;border-radius:14px;padding:40px 44px;box-shadow:0 8px 32px rgba(0,0,0,.25);text-align:center;width:320px}
+#pw-box .pw-icon{font-size:36px;margin-bottom:12px}
+#pw-box h2{font-size:16px;font-weight:700;color:#1a3a5c;margin-bottom:6px}
+#pw-box p{font-size:12px;color:#90a4ae;margin-bottom:22px}
+#pw-input{width:100%;padding:10px 14px;border:1.5px solid #d0dae6;border-radius:8px;font-size:15px;text-align:center;letter-spacing:3px;outline:none;transition:border-color .2s}
+#pw-input:focus{border-color:#1a3a5c}
+#pw-input.error{border-color:#e53935;animation:shake .3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+#pw-btn{margin-top:14px;width:100%;padding:10px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s}
+#pw-btn:hover{opacity:.85}
+#pw-err{font-size:11px;color:#e53935;margin-top:8px;min-height:16px}
 </style>
 </head>
 <body>
+
+<!-- Password overlay -->
+<div id="pw-overlay">
+  <div id="pw-box">
+    <div class="pw-icon">🔒</div>
+    <h2>Backlog 稼働分析</h2>
+    <p>パスワードを入力してください</p>
+    <input id="pw-input" type="password" placeholder="••••••" maxlength="32" autocomplete="current-password">
+    <button id="pw-btn" onclick="checkPw()">ログイン</button>
+    <div id="pw-err"></div>
+  </div>
+</div>
 
 <header>
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -666,6 +692,33 @@ function toast(msg,isErr){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.background=isErr?'#c0392b':'#27ae60';
   t.style.display='block'; setTimeout(()=>t.style.display='none',3500);
+}
+
+// ===== Password =====
+(function(){
+  const KEY='bl_auth';
+  if(sessionStorage.getItem(KEY)==='ok'){
+    document.getElementById('pw-overlay').style.display='none';
+  }
+  document.getElementById('pw-input').addEventListener('keydown',e=>{
+    if(e.key==='Enter') checkPw();
+  });
+})();
+
+function checkPw(){
+  const val=document.getElementById('pw-input').value;
+  const inp=document.getElementById('pw-input');
+  const err=document.getElementById('pw-err');
+  if(val==='multi'){
+    sessionStorage.setItem('bl_auth','ok');
+    document.getElementById('pw-overlay').style.display='none';
+    err.textContent='';
+  } else {
+    inp.value='';
+    inp.classList.add('error');
+    err.textContent='パスワードが正しくありません';
+    setTimeout(()=>inp.classList.remove('error'),400);
+  }
 }
 </script>
 </body>
