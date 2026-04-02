@@ -414,7 +414,7 @@ function processGantt(buf) {
       if (!v||v<=0) continue;
       if (graySet.has(c)) gV[c]=v; else wV[c]=v;
     }
-    if (!Object.keys(gV).length&&!Object.keys(wV).length) continue;
+    // ※ ガント列に値がないタスクも含める（スキップしない）
 
     const gT  = sum(Object.values(gV));
     const wT  = sum(Object.values(wV));
@@ -535,7 +535,8 @@ function renderGantt() {
     if (fs && r.status!==fs) return false;
     if (fc && r.cat!==fc) return false;
     if (ft && !r.key.toLowerCase().includes(ft) && !r.title.toLowerCase().includes(ft)) return false;
-    if (activeMonth && !vcols.some(c=>(r.daily[c.col]||0)>0)) return false;
+    // ガント列に値のないタスクは月フィルターにかかわらず常に表示
+    if (activeMonth && r.weekdayCount > 0 && !vcols.some(c=>(r.daily[c.col]||0)>0)) return false;
     return true;
   });
 
