@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Backlog 稼働分析</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI','Meiryo',Arial,sans-serif;background:#f0f2f5;color:#333;font-size:13px}
+
+/* ===== Header ===== */
+header{background:#1a3a5c;color:#fff;padding:14px 24px;display:flex;align-items:center;gap:10px}
+header h1{font-size:17px;font-weight:600}
+header span{font-size:11px;opacity:.7}
+
+/* ===== Layout ===== */
+.container{max-width:100%;padding:20px}
+
+/* ===== Upload card ===== */
+.card{background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:22px 26px;margin-bottom:18px}
+.card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#78909c;margin-bottom:14px}
+.upload-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.file-label{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border:2px dashed #b0bec5;border-radius:8px;cursor:pointer;font-size:13px;color:#607d8b;transition:all .2s}
+.file-label:hover{border-color:#1a3a5c;background:#f0f5ff;color:#1a3a5c}
+#fileInput{display:none}
+#fileName{font-size:12px;color:#90a4ae}
+.btn{padding:9px 20px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;transition:opacity .15s}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.btn-run{background:#1a3a5c;color:#fff}
+.btn-run:hover:not(:disabled){opacity:.85}
+.btn-dl{background:#27ae60;color:#fff}
+.btn-dl:hover:not(:disabled){opacity:.85}
+.note{font-size:11px;color:#90a4ae;margin-top:10px}
+#loading{display:none;align-items:center;gap:9px;font-size:13px;color:#1a3a5c;margin-top:10px}
+.spin{width:18px;height:18px;border:3px solid #d0dae6;border-top-color:#1a3a5c;border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ===== Capacity input ===== */
+.cap-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:#555}
+.cap-wrap input{width:56px;padding:6px 8px;border:1px solid #d0dae6;border-radius:6px;font-size:13px;text-align:center}
+
+/* ===== Stats ===== */
+.stats-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.stat{background:#fff;border-radius:10px;padding:14px 20px;box-shadow:0 2px 8px rgba(0,0,0,.07);flex:1;min-width:130px}
+.stat .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#90a4ae;margin-bottom:4px}
+.stat .val{font-size:22px;font-weight:700;color:#1a3a5c}
+
+/* ===== Tabs ===== */
+.tabs{display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #e3e9f0}
+.tab-btn{padding:10px 22px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:#90a4ae;border-bottom:3px solid transparent;margin-bottom:-2px;transition:color .2s}
+.tab-btn.active{color:#1a3a5c;border-bottom-color:#1a3a5c}
+.tab-btn:hover:not(.active){color:#1a3a5c}
+
+/* ===== Month nav ===== */
+.month-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 0 10px}
+.month-nav span{font-size:11px;color:#90a4ae;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.month-btn{padding:5px 12px;border:1px solid #d0dae6;border-radius:20px;background:#fff;cursor:pointer;font-size:12px;color:#607d8b;transition:all .15s}
+.month-btn:hover,.month-btn.active{background:#1a3a5c;color:#fff;border-color:#1a3a5c}
+
+/* ===== Filters ===== */
+.filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px}
+.filter-bar label{font-size:12px;color:#607d8b;font-weight:600}
+.filter-bar select,.filter-bar input{padding:6px 10px;border:1px solid #d0dae6;border-radius:6px;font-size:12px;color:#333;background:#fff}
+.filter-bar input[type=text]{min-width:160px}
+
+/* ===== Table wrapper ===== */
+.table-panel{background:#fff;border-radius:0 0 10px 10px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.tw{overflow:auto;max-height:calc(100vh - 340px)}
+
+/* ===== Gantt table ===== */
+table{border-collapse:collapse;font-size:12px;white-space:nowrap}
+table th{background:#1a3a5c;color:#fff;padding:0;text-align:center;font-weight:600;position:sticky;top:0;z-index:2}
+table th.month-th{padding:6px 4px;border-right:1px solid #2a4a6c;font-size:11px}
+table th.day-th{padding:4px 2px;border-right:1px solid #2a4a6c;font-size:11px;min-width:44px;line-height:1.3}
+table th.info-th{padding:8px 10px;text-align:left;z-index:4;border-right:1px solid #2a4a6c}
+table td{padding:4px 4px;border-bottom:1px solid #edf0f5;border-right:1px solid #f0f2f5;text-align:center;vertical-align:middle}
+table td.info-td{text-align:left;padding:4px 10px;background:#fff;border-right:1px solid #e3e9f0}
+table tbody tr:nth-child(even) td:not(.sticky-bg){background:#fafbff}
+table tbody tr:hover td{background:#eef3fb!important}
+
+/* Sticky left columns */
+.s0{position:sticky;left:0;z-index:3}
+.s1{position:sticky;left:90px;z-index:3}
+.s2{position:sticky;left:270px;z-index:3}
+.s3{position:sticky;left:340px;z-index:3}
+.sticky-bg{background:#fff!important}
+th.s0,th.s1,th.s2,th.s3{z-index:5}
+
+/* Gantt data cells */
+.day-val{font-size:11px;font-weight:600;color:#1a3a5c}
+.day-zero{color:#ddd;font-size:10px}
+
+/* Assignee group row */
+.ag-row td{background:#e8eef8!important;font-weight:700;color:#1a3a5c;border-bottom:2px solid #c5d3e8;font-size:12px;padding:6px 10px}
+
+/* Badge */
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700}
+.b0{background:#d6e2ef;color:#1a3a5c}
+.b1{background:#ccffcc;color:#217a21}
+.b2{background:#ffd1d1;color:#a02020}
+.b3{background:#b4ddd7;color:#1d5c55}
+.b4{background:#fff3cd;color:#856404}
+.b5{background:#ede7f6;color:#5e35b1}
+
+/* ===== Workload table ===== */
+.wl-cell{padding:3px 2px!important;min-width:44px;line-height:1.25}
+.wl-hours{font-size:11px;font-weight:700;color:#333}
+.wl-remain{font-size:10px;color:#90a4ae}
+.wl-over{color:#c62828!important}
+
+/* ===== Legend ===== */
+.legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:11px;color:#607d8b;padding:10px 0 6px}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-dot{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.1)}
+
+/* ===== Empty state ===== */
+.empty-state{text-align:center;padding:60px;color:#b0bec5;font-size:14px}
+
+/* ===== Toast ===== */
+.toast{position:fixed;bottom:22px;right:22px;padding:11px 18px;border-radius:8px;font-size:13px;color:#fff;display:none;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+
+/* Scrollbar styling */
+.tw::-webkit-scrollbar{width:8px;height:8px}
+.tw::-webkit-scrollbar-track{background:#f0f2f5}
+.tw::-webkit-scrollbar-thumb{background:#b0bec5;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="4" width="18" height="18" rx="2"/>
+    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+  <h1>Backlog ガントチャート 稼働分析</h1>
+  <span>土日祝→平日按分 / 日別稼働確認 / ワークロード管理</span>
+</header>
+
+<div class="container">
+
+<!-- Upload -->
+<div class="card">
+  <div class="card-title">ファイルを選択して分析実行</div>
+  <div class="upload-row">
+    <label class="file-label" for="fileInput">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      xlsx ファイルを選択
+    </label>
+    <input type="file" id="fileInput" accept=".xlsx">
+    <span id="fileName">Backlog ガントチャートを選択してください</span>
+    <button class="btn btn-run" id="runBtn" onclick="processFile()" disabled>分析実行</button>
+    <button class="btn btn-dl"  id="dlBtn"  onclick="downloadFile()" disabled>Excel ダウンロード</button>
+    <div class="cap-wrap">
+      <label>1日稼働上限</label>
+      <input type="number" id="capInput" value="8" min="1" max="24" step="0.5" onchange="onCapChange()">
+      <span>h</span>
+    </div>
+  </div>
+  <div id="loading"><div class="spin"></div><span id="loadMsg">処理中...</span></div>
+  <div class="note">※ 土日祝列（グレーセル）の時間を平日に均等按分します。セルの背景色（状態）は変更しません。</div>
+</div>
+
+<!-- Stats -->
+<div class="stats-row" id="statsRow" style="display:none">
+  <div class="stat"><div class="lbl">タスク数</div><div class="val" id="sTasks">-</div></div>
+  <div class="stat"><div class="lbl">担当者数</div><div class="val" id="sPeople">-</div></div>
+  <div class="stat"><div class="lbl">土日祝 合計時間</div><div class="val" id="sGray">-</div></div>
+  <div class="stat"><div class="lbl">按分後 平日合計</div><div class="val" id="sWd">-</div></div>
+</div>
+
+<!-- Main panel -->
+<div id="mainPanel" style="display:none">
+
+  <!-- Tabs + month nav inside one card-like wrapper -->
+  <div style="background:#fff;border-radius:10px 10px 0 0;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:0 20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:12px">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('gantt',this)">📅 日別稼働表</button>
+        <button class="tab-btn" onclick="switchTab('workload',this)">📊 ワークロード</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="filter-bar" style="padding:0">
+          <label>担当者:</label><select id="fA" onchange="renderCurrent()"><option value="">全員</option></select>
+          <label>状態:</label><select id="fS" onchange="renderCurrent()"><option value="">全て</option></select>
+          <input type="text" id="fT" placeholder="キー / 件名で検索" oninput="renderCurrent()" style="min-width:150px">
+        </div>
+      </div>
+    </div>
+    <div class="month-nav" id="monthNav"></div>
+  </div>
+
+  <!-- Legend for workload tab -->
+  <div id="wlLegend" class="legend" style="display:none;padding:8px 20px;background:#fff;border-top:1px solid #eee">
+    <span style="font-weight:600;color:#607d8b">負荷:</span>
+    <div class="legend-item"><div class="legend-dot" style="background:#f5f5f5"></div>0h</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e8f5e9"></div>〜2h</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#c8e6c9"></div>〜4h</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fff9c4"></div>〜6h</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ffe082"></div>〜上限</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef9a9a"></div>超過</div>
+    <span style="margin-left:8px;color:#90a4ae">※セル内: 稼働h / 残り可能h</span>
+  </div>
+
+  <div class="table-panel">
+    <div class="tw" id="tableWrap">
+      <table id="mainTable">
+        <thead id="tHead"></thead>
+        <tbody id="tBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div><!-- /mainPanel -->
+
+</div><!-- /container -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ================================================================
+// 祝日 (2025-2027)
+// ================================================================
+const JP_HOL = new Set([
+  '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24',
+  '2025-03-20','2025-04-29','2025-05-03','2025-05-04','2025-05-05',
+  '2025-05-06','2025-07-21','2025-08-11','2025-09-15','2025-09-23',
+  '2025-10-13','2025-11-03','2025-11-23','2025-11-24',
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23',
+  '2026-03-20','2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
+  '2026-07-20','2026-08-11','2026-09-21','2026-09-22','2026-09-23',
+  '2026-10-12','2026-11-03','2026-11-23',
+  '2027-01-01','2027-01-11','2027-02-11','2027-02-23',
+  '2027-03-21','2027-04-29','2027-05-03','2027-05-04','2027-05-05',
+  '2027-07-19','2027-08-11','2027-09-20','2027-09-23',
+  '2027-10-11','2027-11-03','2027-11-23',
+]);
+
+const WD_JA = ['日','月','火','水','木','金','土'];
+
+function isGray(ds) {
+  const d = new Date(ds + 'T12:00:00'), dow = d.getDay();
+  return dow === 0 || dow === 6 || JP_HOL.has(ds);
+}
+
+// ================================================================
+// 状態
+// ================================================================
+let allRows = [], allCols = [], allMonths = [], allWorkload = {};
+let processedWb = null, origFileName = '', CAPACITY = 8;
+let activeTab = 'gantt', activeMonth = '';
+
+// ================================================================
+// ファイル選択
+// ================================================================
+document.getElementById('fileInput').addEventListener('change', function() {
+  const f = this.files[0];
+  document.getElementById('fileName').textContent = f ? f.name : '';
+  document.getElementById('runBtn').disabled = !f;
+  origFileName = f ? f.name : '';
+});
+
+function onCapChange() {
+  CAPACITY = parseFloat(document.getElementById('capInput').value) || 8;
+  if (allRows.length) renderCurrent();
+}
+
+// ================================================================
+// メイン処理
+// ================================================================
+function processFile() {
+  const file = document.getElementById('fileInput').files[0];
+  if (!file) return;
+  setLoad(true, '分析中...');
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('dlBtn').disabled = true;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const result = processGantt(e.target.result);
+      allRows    = result.rows;
+      allCols    = result.cols;
+      allMonths  = result.months;
+      processedWb = result.wb;
+
+      // ワークロード計算
+      allWorkload = buildWorkload(allRows, allCols);
+
+      // フィルター初期化
+      fillSel('fA', [...new Set(allRows.map(r=>r.assignee))].sort());
+      fillSel('fS', [...new Set(allRows.map(r=>r.status))].sort());
+
+      // 月ナビ
+      buildMonthNav();
+      activeMonth = allMonths[0] || '';
+      updateMonthNav();
+
+      // 統計
+      const tGray = allRows.reduce((s,r)=>s+r.grayTotal, 0);
+      const tWd   = allRows.reduce((s,r)=>s+r.newWeekdayValue*r.weekdayCount, 0);
+      document.getElementById('sTasks').textContent  = allRows.length;
+      document.getElementById('sPeople').textContent = [...new Set(allRows.map(r=>r.assignee))].length;
+      document.getElementById('sGray').textContent   = tGray.toFixed(1)+'h';
+      document.getElementById('sWd').textContent     = tWd.toFixed(1)+'h';
+
+      document.getElementById('statsRow').style.display = 'flex';
+      document.getElementById('mainPanel').style.display = 'block';
+      document.getElementById('dlBtn').disabled = false;
+
+      renderCurrent();
+      toast(`分析完了：${allRows.length}件 / ${allMonths.length}ヶ月分`, false);
+    } catch(err) {
+      toast('エラー: ' + err.message, true);
+      console.error(err);
+    } finally {
+      setLoad(false);
+      document.getElementById('runBtn').disabled = false;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ================================================================
+// ガントチャート処理ロジック
+// ================================================================
+function processGantt(buf) {
+  const wb    = XLSX.read(buf, { cellStyles: true, type: 'array' });
+  const ws    = wb.Sheets[wb.SheetNames[0]];
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const DSC   = 12; // M列
+
+  // 月境界
+  const mBounds = (ws['!merges']||[])
+    .filter(m => m.s.r===0 && m.s.c>=DSC)
+    .map(m => {
+      const c = ws[XLSX.utils.encode_cell({r:0,c:m.s.c})];
+      return c&&c.v ? {label:String(c.v), s:m.s.c, e:m.e.c} : null;
+    }).filter(Boolean).sort((a,b)=>a.s-b.s);
+
+  // 列ごとの日付・グレー判定
+  const graySet = new Set();
+  const cols    = []; // 平日のみ
+  let cy=null, cm=null;
+
+  for (let c=DSC; c<=range.e.c; c++) {
+    const mc = ws[XLSX.utils.encode_cell({r:0,c})];
+    if (mc&&mc.v) { const p=String(mc.v).split('/'); cy=+p[0]; cm=+p[1]; }
+    const dc  = ws[XLSX.utils.encode_cell({r:1,c})];
+    const day = dc ? +dc.v : NaN;
+    if (!isNaN(day)&&cy&&cm) {
+      const ds = `${cy}-${pad(cm)}-${pad(day)}`;
+      if (isGray(ds)) {
+        graySet.add(c);
+      } else {
+        const mb  = mBounds.find(m=>c>=m.s&&c<=m.e);
+        const dow = new Date(ds+'T12:00:00').getDay();
+        cols.push({ col:c, ds, lbl:`${cm}/${day}`, dayJa:WD_JA[dow], mo:mb?mb.label:'' });
+      }
+    }
+  }
+
+  // データ行処理
+  const rows = [];
+  for (let r=4; r<=range.e.r; r++) {
+    const kc = ws[XLSX.utils.encode_cell({r,c:0})];
+    if (!kc||!kc.v) continue;
+    const g = c => (ws[XLSX.utils.encode_cell({r,c})]||{}).v||'';
+    const assignee=String(g(6)), title=String(g(2)), cat=String(g(3)), status=String(g(11));
+
+    const gV={}, wV={};
+    for (let c=DSC; c<=range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({r,c})];
+      if (!cell||cell.v==null) continue;
+      const v = parseFloat(cell.v);
+      if (!v||v<=0) continue;
+      if (graySet.has(c)) gV[c]=v; else wV[c]=v;
+    }
+    if (!Object.keys(gV).length&&!Object.keys(wV).length) continue;
+
+    const gT  = sum(Object.values(gV));
+    const wT  = sum(Object.values(wV));
+    const wC  = Object.keys(wV).length;
+    const nv  = wC>0 ? (gT+wT)/wC : 0;
+    const rv  = r2(nv);
+
+    // シート更新（値のみ、スタイル維持）
+    Object.keys(gV).map(Number).forEach(c=>{const a=enc(r,c);if(ws[a]){ws[a].v=0;ws[a].w='0.00';}});
+    Object.keys(wV).map(Number).forEach(c=>{const a=enc(r,c);if(ws[a]){ws[a].v=rv;ws[a].w=rv.toFixed(2);}});
+
+    // 日別値（平日のみ）
+    const daily={};
+    Object.keys(wV).map(Number).forEach(c=>{ daily[c]=rv; });
+
+    // 月別集計
+    const mo={};
+    for (const mb of mBounds) {
+      let s=0; for(let c=mb.s;c<=mb.e;c++) if(wV[c]!==undefined) s+=rv;
+      mo[mb.label]=r2(s);
+    }
+
+    rows.push({ key:String(kc.v), title, cat, assignee, status,
+      grayTotal:r2(gT), weekdayTotal:r2(wT), newWeekdayValue:rv, weekdayCount:wC,
+      monthTotals:mo, daily });
+  }
+
+  return { wb, rows, cols, months: mBounds.map(m=>m.label) };
+}
+
+// ================================================================
+// ワークロード計算
+// ================================================================
+function buildWorkload(rows, cols) {
+  const cSet = new Set(cols.map(c=>c.col));
+  const wl = {};
+  rows.forEach(row => {
+    if (!wl[row.assignee]) wl[row.assignee]={};
+    Object.entries(row.daily||{}).forEach(([c,v])=>{
+      const ci=+c;
+      if (cSet.has(ci)) wl[row.assignee][ci]=r2((wl[row.assignee][ci]||0)+v);
+    });
+  });
+  return wl;
+}
+
+// ================================================================
+// タブ切替
+// ================================================================
+function switchTab(name, btn) {
+  activeTab = name;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('wlLegend').style.display = name==='workload' ? 'flex' : 'none';
+  renderCurrent();
+}
+
+function renderCurrent() {
+  if (activeTab==='gantt') renderGantt();
+  else renderWorkload();
+}
+
+// ================================================================
+// 月ナビ
+// ================================================================
+function buildMonthNav() {
+  const nav = document.getElementById('monthNav');
+  nav.innerHTML = '<span>表示月:</span>';
+  allMonths.forEach(m => {
+    const b = document.createElement('button');
+    b.className = 'month-btn';
+    b.textContent = m.replace('/','年')+'月';
+    b.dataset.month = m;
+    b.onclick = () => { activeMonth=m; updateMonthNav(); renderCurrent(); };
+    nav.appendChild(b);
+  });
+}
+
+function updateMonthNav() {
+  document.querySelectorAll('.month-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.month === activeMonth);
+  });
+}
+
+// ================================================================
+// 日別稼働表（Gantt タブ）
+// ================================================================
+function renderGantt() {
+  const fa = document.getElementById('fA').value;
+  const fs = document.getElementById('fS').value;
+  const ft = document.getElementById('fT').value.toLowerCase();
+  const vcols = allCols.filter(c => !activeMonth || c.mo === activeMonth);
+
+  // 月グループヘッダー
+  const mGroups = buildMonthGroups(vcols);
+
+  // ヘッダー（2行）
+  const STICKY_W = [90,180,70,64]; // キー,件名,状態,合計
+  const left = [0,90,270,340];
+
+  document.getElementById('tHead').innerHTML = `
+    <tr>
+      <th class="info-th s0 sticky-bg" style="left:0;min-width:${STICKY_W[0]}px" rowspan="2">キー</th>
+      <th class="info-th s1 sticky-bg" style="left:${left[1]}px;min-width:${STICKY_W[1]}px" rowspan="2">件名</th>
+      <th class="info-th s2 sticky-bg" style="left:${left[2]}px;min-width:${STICKY_W[2]}px" rowspan="2">状態</th>
+      <th class="info-th s3 sticky-bg" style="left:${left[3]}px;min-width:${STICKY_W[3]}px;text-align:right" rowspan="2">合計h</th>
+      ${mGroups.map(g=>`<th class="month-th" colspan="${g.count}">${g.label.replace('/','年')}月</th>`).join('')}
+    </tr>
+    <tr>
+      ${vcols.map(c=>`<th class="day-th">${c.lbl}<br><span style="font-weight:400;opacity:.8">${c.dayJa}</span></th>`).join('')}
+    </tr>`;
+
+  // 行データ
+  const rows = allRows.filter(r => {
+    if (fa && r.assignee!==fa) return false;
+    if (fs && r.status!==fs) return false;
+    if (ft && !r.key.toLowerCase().includes(ft) && !r.title.toLowerCase().includes(ft)) return false;
+    if (activeMonth && !vcols.some(c=>(r.daily[c.col]||0)>0)) return false;
+    return true;
+  });
+
+  const byPerson = groupBy(rows, 'assignee');
+  let html = '';
+
+  if (!rows.length) {
+    html = `<tr><td colspan="${vcols.length+4}" class="empty-state">条件に一致するデータがありません</td></tr>`;
+  } else {
+    Object.entries(byPerson).sort().forEach(([name, tasks]) => {
+      const personTotal = r2(tasks.reduce((s,r)=>s+r.newWeekdayValue*r.weekdayCount,0));
+      html += `<tr class="ag-row">
+        <td colspan="4" class="s0 sticky-bg" style="left:0">👤 ${esc(name)}
+          <span style="font-size:11px;font-weight:400;color:#607d8b;margin-left:8px">${tasks.length}件 ／ 合計 ${personTotal.toFixed(2)}h</span>
+        </td>
+        <td colspan="${vcols.length}" style="background:#e8eef8"></td>
+      </tr>`;
+
+      tasks.forEach(row => {
+        const total = r2(row.newWeekdayValue * row.weekdayCount);
+        html += `<tr>
+          <td class="info-td s0 sticky-bg" style="left:0"><code style="font-size:10px;color:#607d8b">${esc(row.key)}</code></td>
+          <td class="info-td s1 sticky-bg" style="left:90px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${esc(row.title)}">${esc(trunc(row.title,25))}</td>
+          <td class="info-td s2 sticky-bg" style="left:270px">${badge(row.status)}</td>
+          <td class="info-td s3 sticky-bg" style="left:340px;text-align:right;font-weight:700;color:#1a3a5c">${total.toFixed(2)}</td>
+          ${vcols.map(c=>{
+            const v = row.daily[c.col];
+            return v>0
+              ? `<td class="day-val">${v.toFixed(2)}</td>`
+              : `<td class="day-zero">-</td>`;
+          }).join('')}
+        </tr>`;
+      });
+    });
+  }
+
+  document.getElementById('tBody').innerHTML = html;
+}
+
+// ================================================================
+// ワークロードタブ
+// ================================================================
+function renderWorkload() {
+  const fa    = document.getElementById('fA').value;
+  const vcols = allCols.filter(c => !activeMonth || c.mo === activeMonth);
+  const mGroups = buildMonthGroups(vcols);
+  const people  = Object.keys(allWorkload).sort().filter(p => !fa || p===fa);
+
+  document.getElementById('tHead').innerHTML = `
+    <tr>
+      <th class="info-th s0 sticky-bg" style="left:0;min-width:140px" rowspan="2">担当者</th>
+      ${mGroups.map(g=>`<th class="month-th" colspan="${g.count}">${g.label.replace('/','年')}月</th>`).join('')}
+    </tr>
+    <tr>
+      ${vcols.map(c=>`<th class="day-th">${c.lbl}<br><span style="font-weight:400;opacity:.8">${c.dayJa}</span></th>`).join('')}
+    </tr>`;
+
+  let html = '';
+  if (!people.length) {
+    html = `<tr><td colspan="${vcols.length+1}" class="empty-state">データがありません</td></tr>`;
+  } else {
+    people.forEach(name => {
+      const pd = allWorkload[name]||{};
+      html += `<tr>
+        <td class="info-td s0 sticky-bg" style="left:0;font-weight:700;color:#1a3a5c">${esc(name)}</td>
+        ${vcols.map(c=>{
+          const h   = r2(pd[c.col]||0);
+          const rem = r2(CAPACITY - h);
+          const bg  = wlColor(h, CAPACITY);
+          const overCap = h > CAPACITY;
+          if (h===0) return `<td class="wl-cell" style="background:#f5f5f5"></td>`;
+          const remStr = rem >= 0 ? `残${rem.toFixed(1)}` : `<span style="color:#c62828;font-weight:700">超${Math.abs(rem).toFixed(1)}</span>`;
+          return `<td class="wl-cell" style="background:${bg}" title="${c.ds}  ${h}h稼働 / 残${rem}h">
+            <div class="wl-hours ${overCap?'wl-over':''}">${h.toFixed(2)}</div>
+            <div class="wl-remain">${remStr}</div>
+          </td>`;
+        }).join('')}
+      </tr>`;
+    });
+
+    // 全担当者合計行
+    if (people.length > 1) {
+      html += `<tr style="border-top:2px solid #1a3a5c">
+        <td class="info-td s0 sticky-bg" style="left:0;font-weight:700;color:#607d8b">チーム合計</td>
+        ${vcols.map(c=>{
+          const total = r2(people.reduce((s,p)=>s+(allWorkload[p]?.[c.col]||0),0));
+          return total>0
+            ? `<td class="wl-cell" style="background:#e3f2fd;color:#1a3a5c;font-weight:700;font-size:11px" title="${c.ds} チーム合計: ${total}h">${total.toFixed(2)}</td>`
+            : `<td class="wl-cell" style="background:#f5f5f5"></td>`;
+        }).join('')}
+      </tr>`;
+    }
+  }
+
+  document.getElementById('tBody').innerHTML = html;
+}
+
+// ================================================================
+// ワークロード色
+// ================================================================
+function wlColor(h, cap) {
+  const pct = h / cap;
+  if (pct <= 0)    return '#f5f5f5';
+  if (pct <= 0.25) return '#e8f5e9';
+  if (pct <= 0.5)  return '#c8e6c9';
+  if (pct <= 0.75) return '#fff9c4';
+  if (pct <= 1.0)  return '#ffe082';
+  return '#ef9a9a';
+}
+
+// ================================================================
+// Excel ダウンロード
+// ================================================================
+function downloadFile() {
+  if (!processedWb) return;
+  setLoad(true, 'Excelを生成中...');
+  setTimeout(() => {
+    try {
+      const d    = new Date();
+      const pfx  = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+      const base = origFileName.replace(/\.xlsx$/i,'');
+      const name = `${pfx}_${base}.xlsx`;
+      XLSX.writeFile(processedWb, name, { bookType:'xlsx', cellStyles:true });
+      toast('ダウンロード完了: ' + name, false);
+    } catch(e) { toast('エラー: '+e.message, true); }
+    finally { setLoad(false); }
+  }, 30);
+}
+
+// ================================================================
+// ユーティリティ
+// ================================================================
+function buildMonthGroups(vcols) {
+  const g=[];
+  vcols.forEach(c => {
+    if (g.length && g[g.length-1].label===c.mo) g[g.length-1].count++;
+    else g.push({label:c.mo, count:1});
+  });
+  return g;
+}
+function groupBy(arr, key) {
+  return arr.reduce((m,x)=>{ (m[x[key]]||(m[x[key]]=[])).push(x); return m; }, {});
+}
+function fillSel(id, items) {
+  const el=document.getElementById(id), first=el.options[0];
+  el.innerHTML=''; el.appendChild(first);
+  items.forEach(v=>{ const o=document.createElement('option'); o.value=o.textContent=v; el.appendChild(o); });
+}
+function badge(s) {
+  const map={'処理中':'b0','完了':'b1','未対応':'b2','処理済み':'b3','レビュー待ち':'b4'};
+  return `<span class="badge ${map[s]||'b5'}">${esc(s)}</span>`;
+}
+function trunc(s,n){ return s&&s.length>n?s.slice(0,n)+'…':(s||''); }
+function esc(s){ const d=document.createElement('div');d.textContent=s||'';return d.innerHTML; }
+function pad(n){ return String(n).padStart(2,'0'); }
+function r2(v){ return Math.round(v*100)/100; }
+function sum(a){ return a.reduce((s,x)=>s+x,0); }
+function enc(r,c){ return XLSX.utils.encode_cell({r,c}); }
+function setLoad(on,msg){ document.getElementById('loading').style.display=on?'flex':'none'; if(msg)document.getElementById('loadMsg').textContent=msg; }
+function toast(msg,isErr){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.background=isErr?'#c0392b':'#27ae60';
+  t.style.display='block'; setTimeout(()=>t.style.display='none',3500);
+}
+</script>
+</body>
+</html>
