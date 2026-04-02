@@ -404,7 +404,7 @@ function processGantt(buf) {
     const kc = ws[XLSX.utils.encode_cell({r,c:0})];
     if (!kc||!kc.v) continue;
     const g = c => (ws[XLSX.utils.encode_cell({r,c})]||{}).v||'';
-    const assignee=String(g(6)), title=String(g(2)), cat=String(g(3)), status=String(g(11));
+    const assignee=String(g(6)), title=String(g(2)), cat=String(g(1)), status=String(g(11));
 
     const gV={}, wV={};
     for (let c=DSC; c<=range.e.c; c++) {
