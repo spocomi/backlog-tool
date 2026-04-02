@@ -125,6 +125,13 @@ th.s0,th.s1,th.s2,th.s3{z-index:5}
 .tw::-webkit-scrollbar-track{background:#f0f2f5}
 .tw::-webkit-scrollbar-thumb{background:#b0bec5;border-radius:4px}
 
+/* ===== Drag over ===== */
+.file-label.drag-over{border-color:#1a3a5c;background:#e8f0fe;color:#1a3a5c;border-style:solid}
+
+/* ===== Global tooltip ===== */
+#gl-tip{position:fixed;background:#1a3a5c;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;line-height:1.6;max-width:340px;pointer-events:none;display:none;z-index:9990;box-shadow:0 4px 16px rgba(0,0,0,.3);word-break:break-all}
+#gl-tip::after{content:'';position:absolute;top:100%;left:14px;border:6px solid transparent;border-top-color:#1a3a5c}
+
 /* ===== Password overlay ===== */
 #pw-overlay{position:fixed;inset:0;background:#1a3a5c;display:flex;align-items:center;justify-content:center;z-index:9999}
 #pw-box{background:#fff;border-radius:14px;padding:40px 44px;box-shadow:0 8px 32px rgba(0,0,0,.25);text-align:center;width:320px}
@@ -170,7 +177,7 @@ th.s0,th.s1,th.s2,th.s3{z-index:5}
 <div class="card">
   <div class="card-title">ファイルを選択して分析実行</div>
   <div class="upload-row">
-    <label class="file-label" for="fileInput">
+    <label class="file-label" id="dropZone" for="fileInput">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
@@ -211,6 +218,7 @@ th.s0,th.s1,th.s2,th.s3{z-index:5}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <div class="filter-bar" style="padding:0">
+          <label>種別:</label><select id="fC" onchange="renderCurrent()"><option value="">全て</option></select>
           <label>担当者:</label><select id="fA" onchange="renderCurrent()"><option value="">全員</option></select>
           <label>状態:</label><select id="fS" onchange="renderCurrent()"><option value="">全て</option></select>
           <input type="text" id="fT" placeholder="キー / 件名で検索" oninput="renderCurrent()" style="min-width:150px">
@@ -244,6 +252,7 @@ th.s0,th.s1,th.s2,th.s3{z-index:5}
 
 </div><!-- /container -->
 <div class="toast" id="toast"></div>
+<div id="gl-tip"></div>
 
 <script>
 // ================================================================
@@ -316,6 +325,7 @@ function processFile() {
       allWorkload = buildWorkload(allRows, allCols);
 
       // フィルター初期化
+      fillSel('fC', [...new Set(allRows.map(r=>r.cat))].sort());
       fillSel('fA', [...new Set(allRows.map(r=>r.assignee))].sort());
       fillSel('fS', [...new Set(allRows.map(r=>r.status))].sort());
 
@@ -495,22 +505,24 @@ function updateMonthNav() {
 function renderGantt() {
   const fa = document.getElementById('fA').value;
   const fs = document.getElementById('fS').value;
+  const fc = document.getElementById('fC').value;
   const ft = document.getElementById('fT').value.toLowerCase();
   const vcols = allCols.filter(c => !activeMonth || c.mo === activeMonth);
 
   // 月グループヘッダー
   const mGroups = buildMonthGroups(vcols);
 
-  // ヘッダー（2行）
-  const STICKY_W = [90,180,70,64]; // キー,件名,状態,合計
-  const left = [0,90,270,340];
+  // ヘッダー（2行）: キー | 種別 | 件名 | 状態 | 合計h
+  const STICKY_W = [90, 80, 180, 70, 64];
+  const left     = [0, 90, 170, 350, 420];
 
   document.getElementById('tHead').innerHTML = `
     <tr>
-      <th class="info-th s0 sticky-bg" style="left:0;min-width:${STICKY_W[0]}px" rowspan="2">キー</th>
-      <th class="info-th s1 sticky-bg" style="left:${left[1]}px;min-width:${STICKY_W[1]}px" rowspan="2">件名</th>
-      <th class="info-th s2 sticky-bg" style="left:${left[2]}px;min-width:${STICKY_W[2]}px" rowspan="2">状態</th>
-      <th class="info-th s3 sticky-bg" style="left:${left[3]}px;min-width:${STICKY_W[3]}px;text-align:right" rowspan="2">合計h</th>
+      <th class="info-th s0 sticky-bg" style="left:${left[0]}px;min-width:${STICKY_W[0]}px" rowspan="2">キー</th>
+      <th class="info-th s0 sticky-bg" style="left:${left[1]}px;min-width:${STICKY_W[1]}px" rowspan="2">種別</th>
+      <th class="info-th s1 sticky-bg" style="left:${left[2]}px;min-width:${STICKY_W[2]}px" rowspan="2">件名</th>
+      <th class="info-th s2 sticky-bg" style="left:${left[3]}px;min-width:${STICKY_W[3]}px" rowspan="2">状態</th>
+      <th class="info-th s3 sticky-bg" style="left:${left[4]}px;min-width:${STICKY_W[4]}px;text-align:right" rowspan="2">合計h</th>
       ${mGroups.map(g=>`<th class="month-th" colspan="${g.count}">${g.label.replace('/','年')}月</th>`).join('')}
     </tr>
     <tr>
@@ -521,6 +533,7 @@ function renderGantt() {
   const rows = allRows.filter(r => {
     if (fa && r.assignee!==fa) return false;
     if (fs && r.status!==fs) return false;
+    if (fc && r.cat!==fc) return false;
     if (ft && !r.key.toLowerCase().includes(ft) && !r.title.toLowerCase().includes(ft)) return false;
     if (activeMonth && !vcols.some(c=>(r.daily[c.col]||0)>0)) return false;
     return true;
@@ -530,15 +543,15 @@ function renderGantt() {
   let html = '';
 
   if (!rows.length) {
-    html = `<tr><td colspan="${vcols.length+4}" class="empty-state">条件に一致するデータがありません</td></tr>`;
+    html = `<tr><td colspan="${vcols.length+5}" class="empty-state">条件に一致するデータがありません</td></tr>`;
   } else {
     Object.entries(byPerson).sort().forEach(([name, tasks]) => {
       const personTotal = r2(tasks.reduce((s,r)=>s+r.newWeekdayValue*r.weekdayCount,0));
       html += `<tr class="ag-row">
-        <td colspan="3" class="s0 sticky-bg" style="left:0">👤 ${esc(name)}
+        <td colspan="4" class="s0 sticky-bg" style="left:0">👤 ${esc(name)}
           <span style="font-size:11px;font-weight:400;color:#607d8b;margin-left:8px">${tasks.length}件 ／ 合計 ${personTotal.toFixed(2)}h</span>
         </td>
-        <td class="s3 sticky-bg" style="left:340px;text-align:center;color:#9e9e9e;font-weight:400;font-size:11px">合計</td>
+        <td class="s0 sticky-bg" style="left:${left[4]}px;text-align:center;color:#9e9e9e;font-weight:400;font-size:11px">合計</td>
         ${vcols.map(c => {
           const daySum = r2(tasks.reduce((s, r) => s + (r.daily[c.col] || 0), 0));
           return daySum > 0
@@ -550,10 +563,11 @@ function renderGantt() {
       tasks.forEach(row => {
         const total = r2(row.newWeekdayValue * row.weekdayCount);
         html += `<tr>
-          <td class="info-td s0 sticky-bg" style="left:0"><code style="font-size:10px;color:#607d8b">${esc(row.key)}</code></td>
-          <td class="info-td s1 sticky-bg" style="left:90px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${esc(row.title)}">${esc(trunc(row.title,25))}</td>
-          <td class="info-td s2 sticky-bg" style="left:270px">${badge(row.status)}</td>
-          <td class="info-td s3 sticky-bg" style="left:340px;text-align:right;font-weight:700;color:#1a3a5c">${total.toFixed(2)}</td>
+          <td class="info-td s0 sticky-bg" style="left:${left[0]}px"><code style="font-size:10px;color:#607d8b">${esc(row.key)}</code></td>
+          <td class="info-td s0 sticky-bg" style="left:${left[1]}px;max-width:${STICKY_W[1]}px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#607d8b">${esc(row.cat)}</td>
+          <td class="info-td s1 sticky-bg tip-cell" style="left:${left[2]}px;max-width:${STICKY_W[2]}px;overflow:hidden;text-overflow:ellipsis;cursor:default" data-tip="${esc(row.title)}">${esc(trunc(row.title,22))}</td>
+          <td class="info-td s2 sticky-bg" style="left:${left[3]}px">${badge(row.status)}</td>
+          <td class="info-td s3 sticky-bg" style="left:${left[4]}px;text-align:right;font-weight:700;color:#1a3a5c">${total.toFixed(2)}</td>
           ${vcols.map(c=>{
             const v = row.daily[c.col];
             return v>0
@@ -693,6 +707,73 @@ function toast(msg,isErr){
   t.textContent=msg; t.style.background=isErr?'#c0392b':'#27ae60';
   t.style.display='block'; setTimeout(()=>t.style.display='none',3500);
 }
+
+// ===== Drag & Drop =====
+(function(){
+  const zone = document.getElementById('dropZone');
+  const input = document.getElementById('fileInput');
+  const nameEl = document.getElementById('fileName');
+
+  ['dragenter','dragover'].forEach(ev => {
+    zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  });
+  ['dragleave','dragend'].forEach(ev => {
+    zone.addEventListener(ev, () => zone.classList.remove('drag-over'));
+  });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file || !file.name.match(/\.xlsx$/i)) { toast('xlsx ファイルをドロップしてください', true); return; }
+    // fileInputにセット
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    nameEl.textContent = file.name;
+    origFileName = file.name;
+    document.getElementById('runBtn').disabled = false;
+  });
+
+  input.addEventListener('change', () => {
+    if (input.files[0]) {
+      nameEl.textContent = input.files[0].name;
+      origFileName = input.files[0].name;
+    }
+  });
+})();
+
+// ===== Tooltip (件名ホバー) =====
+(function(){
+  const tip = document.getElementById('gl-tip');
+  let visible = false;
+
+  document.getElementById('tBody').addEventListener('mouseover', e => {
+    const cell = e.target.closest('.tip-cell');
+    if (!cell) return;
+    tip.textContent = cell.dataset.tip || '';
+    tip.style.display = 'block';
+    visible = true;
+    moveTip(e);
+  });
+  document.getElementById('tBody').addEventListener('mousemove', e => {
+    if (!visible) return;
+    moveTip(e);
+  });
+  document.getElementById('tBody').addEventListener('mouseout', e => {
+    if (!e.target.closest('.tip-cell')) return;
+    tip.style.display = 'none';
+    visible = false;
+  });
+
+  function moveTip(e) {
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let x = e.clientX + 14, y = e.clientY - th - 16;
+    if (x + tw > window.innerWidth - 10) x = e.clientX - tw - 14;
+    if (y < 8) y = e.clientY + 20;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+})();
 
 // ===== Password =====
 (function(){
